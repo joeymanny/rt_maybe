@@ -10,6 +10,7 @@ use wgpu::{PipelineLayoutDescriptor, RenderPipelineDescriptor, util::DeviceExt};
 use winit::{event::{KeyEvent, ElementState, self}, keyboard::KeyCode};
 fn main(){
     let event_loop = winit::event_loop::EventLoop::new().unwrap();
+    event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
     let primary_size = match event_loop.primary_monitor(){
         Some(v) => v.size(),
         None => FALLBACK_RESOLUTION
