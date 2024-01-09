@@ -2,10 +2,12 @@ const ZOOM_BASE: f32 = 1.3;
 
 const FALLBACK_RESOLUTION: winit::dpi::PhysicalSize<u32> = winit::dpi::PhysicalSize::new(800, 600);
 
-const LEN: usize = 6;
+const LEN: usize = 20;
+
+use std::f32::consts::PI;
 
 use wgpu::{PipelineLayoutDescriptor, RenderPipelineDescriptor, util::DeviceExt};
-use winit::{event::KeyEvent, keyboard::KeyCode};
+use winit::{event::{KeyEvent, ElementState, self}, keyboard::KeyCode};
 fn main(){
     let event_loop = winit::event_loop::EventLoop::new().unwrap();
     let primary_size = match event_loop.primary_monitor(){
@@ -50,11 +52,12 @@ async fn run(event_loop: winit::event_loop::EventLoop<()>, window: winit::window
         },
         None
     ).await.expect("couldn't find an adequate device");
-    let mandel_commands: &mut [f32] = &mut [  // FIXME!!!!!!!!!!!!!!!!!!!!!!
-        size.width as f32, size.height as f32, // screen dimensions
-        0.0, 0.0, // sphere pos
-        0.25,  // sphere radius
-        0.0
+    let mandel_commands: &mut [f32] = &mut [
+        size.width as f32, size.height as f32, 0.0, 0.0, // screen dimensions + 2 unused f32
+        0.0, 0.0, 0.0, PI / 2.0, // camera position + fov
+        0.0, 1.0, -5.0, 0.3, // light position + light tolerance
+        0.0, -1.0, -5.0, 0.25,// sphere position + radius
+        0.0, 1.0, 0.0, 0.0, // circle color + unused f32
     ];
     let staging_mandel_commands_buffer = device.create_buffer(&wgpu::BufferDescriptor{
         label: None,
@@ -185,12 +188,51 @@ async fn run(event_loop: winit::event_loop::EventLoop<()>, window: winit::window
                 frame.present();
             },
             winit::event::WindowEvent::CloseRequested => target.exit(),
+            winit::event::WindowEvent::KeyboardInput { event: KeyEvent{ physical_key: winit::keyboard::PhysicalKey::Code(key), state: ElementState::Pressed, .. }, .. } =>{
+                let mut delta = (0., 0., 0., 0.0);
+                if let KeyCode::KeyO = key{
+                    delta.2 += -0.125;
+                }
+                if let KeyCode::KeyL = key{
+                    delta.2 += 0.125;
+                }
+                if let KeyCode::KeyK = key{
+                    delta.0 += -0.125;
+                }
+                if let KeyCode::Semicolon = key{
+                    delta.0 += 0.125;
+                }
+                if let KeyCode::KeyJ = key{
+                    delta.1 += -0.125;
+                }
+                if let KeyCode::KeyU = key{
+                    delta.1 += 0.125;
+                }
+                if let KeyCode::Minus= key{
+                    delta.3 += 0.125;
+                }
+                if let KeyCode::Equal = key{
+                    delta.3 += -0.125;
+                }
+                if delta != (0.,0.,0.,0.0){
+                    //8,9,10
+                    mandel_commands[8] += delta.0;
+                    mandel_commands[9] += delta.1;
+                    mandel_commands[10] += delta.2;
+                    mandel_commands[7] += delta.3;
+                    is_mandel_update = true;
+                    println!("x:\t{}\ny:\t{}\nz:\t{}\nzoom:\t{}\n", mandel_commands[8], mandel_commands[9], mandel_commands[10], mandel_commands[7]);
+                }
+
+
+            },
+
             // winit::event::WindowEvent::KeyboardInput{event: winit::keyboard::Keyevent{..}, ..} =>(),
             _ => (),
             }
         }
         if is_mandel_update{
-            dbg!(&mandel_commands);
+            // dbg!(&mandel_commands);
             let (sender, receiver) = flume::bounded(1);
             let slice = staging_mandel_commands_buffer.slice(..);
             slice.map_async(wgpu::MapMode::Write, move |v| sender.send(v).unwrap());
@@ -209,6 +251,7 @@ async fn run(event_loop: winit::event_loop::EventLoop<()>, window: winit::window
                 );
                 queue.submit(Some(encoder.finish()));
             }
+            window.request_redraw();
         }
     })
     .unwrap();
