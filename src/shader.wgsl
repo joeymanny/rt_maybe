@@ -37,11 +37,9 @@ fn fs_main(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
 
     var view_plane_scalar: f32 = tan(cmd.cam.w / 2.0);
 
-    var ray = vec3(newpos * view_plane_scalar, 0.0) + view_plane_offset;
+    var ray = normalize(vec3(newpos * view_plane_scalar, 0.0) + view_plane_offset);
 
     let og_ray = ray;
-
-    // var step = normalize(ray) * step_length;
 
     var col: vec3<f32> = void_color;
 
@@ -51,7 +49,7 @@ fn fs_main(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
 
     while (length(ray) < far_clip && go){
         ray *= ((min(sphere_sdf(ray, cmd.sphere), length(cmd.light.xyz - ray)) + length(ray)) / length(ray));
-        if sphere_sdf(ray, cmd.sphere) < 0.01 {
+        if sphere_sdf(ray, cmd.sphere) < 0.001 {
             col = cmd.sphere_col;
             go = false;
             var shadow_step = normalize(cmd.light.xyz - ray) * step_length;

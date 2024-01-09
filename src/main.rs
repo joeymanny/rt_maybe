@@ -56,7 +56,7 @@ async fn run(event_loop: winit::event_loop::EventLoop<()>, window: winit::window
         size.width as f32, size.height as f32, 0.0, 0.0, // screen dimensions + 2 unused f32
         0.0, 0.0, 0.0, PI / 2.0, // camera position + fov
         0.0, 1.0, -5.0, 0.3, // light position + light tolerance
-        0.0, -1.0, -5.0, 0.25,// sphere position + radius
+        0.0, 0.0, -5.0, 0.25,// sphere position + radius
         0.0, 1.0, 0.0, 0.0, // circle color + unused f32
     ];
     let staging_mandel_commands_buffer = device.create_buffer(&wgpu::BufferDescriptor{
