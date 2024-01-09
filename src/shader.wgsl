@@ -1,17 +1,11 @@
 @group(0) @binding(0) var<uniform> cmd: MandelCommands;
 
 struct MandelCommands{
-    size: vec4<f32>,
-    offset: vec4<f32>,
-    zoom: f32,
-    lod: f32,
-    sphere: Sphere
+    size: vec2<f32>,
+    circle_pos: vec2<f32>,
+    circle_rad: f32,
 }
-struct Sphere{
-    pos: vec4<f32>,
-    color: vec4<f32>,
-    radius: f32,
-}
+
 
 @vertex
 fn vs_main(@builtin(vertex_index) in_vertex_index: u32, @builtin(instance_index) instance_index: u32) -> @builtin(position) vec4<f32> {
@@ -50,51 +44,32 @@ fn vs_main(@builtin(vertex_index) in_vertex_index: u32, @builtin(instance_index)
     return vec4<f32>(f32(x), f32(y), 0.0, 1.0);
 }
 
-const zoom_base = 1.3;
-
-var<private> lodf: f32;
-
-const a: f32 = 0.249658;
-const b: f32 = -10.0235;
-const c: f32 = 57.0;
 
 @fragment
 fn fs_main(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
 
     var newpos = pos.xy / cmd.size.xy; // normalize to 0 - 1
 
-    newpos.x = ((newpos.x - 0.5)    // cartesian coordinates
-        * (cmd.size.x / cmd.size.y))// account for aspect ratio
-        * pow(zoom_base, cmd.zoom)  // zoom in
+    newpos.x = newpos.x
+        //* (cmd.size.x / cmd.size.y)// account for aspect ratio
+        //- (cmd.size.x / cmd.size.y / 2.0)
     ;
 
-    newpos.y = (newpos.y - 0.5)
-        * pow(zoom_base, cmd.zoom)
+    newpos.y = newpos.y
+        //- 0.5
     ;
 
-    newpos += cmd.offset.xy;
+    //let dist = length(newpos - cmd.circle_pos) - cmd.circle_rad;
 
-    lodf = max(8.0, a * cmd.zoom * cmd.zoom + b * cmd.zoom + c); // dynamic level of detail based off zoom
-    lodf *= cmd.lod;    // the actual requested lod also has an effect
+    //newpos += cmd.offset.xy;
 
-    var mand = f32(mandel(Complex(newpos.x, newpos.y)));
-    var mand_val = mand; // how many iterations did it take
+    //var col = mix(
+    //    mix(vec3(1.0, 0.0, 1.0), vec3(0.0, 0.0, 1.0), -dist / cmd.circle_rad), // inside circle
+    //    mix(vec3(0.0), vec3(0.0, 1.0, 0.0), dist), // outside circle
+    //smoothstep(-0.003, 0.0, dist));
 
-    // taking the average of surrounding pixels improves detail at the cost of performance
-    // var unit = vec2(1.0) / cmd.size;
-    // unit.x *= pow(zoom_base, cmd.zoom);
-    // unit.y *= pow(zoom_base, cmd.zoom);
-    // mand += f32(mandel(Complex(newpos.x - unit.x, newpos.y)))
-    //     + f32(mandel(Complex(newpos.x, newpos.y + unit.y)))
-    //     + f32(mandel(Complex(newpos.x + unit.x, newpos.y)))
-    //     + f32(mandel(Complex(newpos.x, newpos.y - unit.y)));
-    // mand /= 5.0;
-
-    mand /= lodf; // normalize to 0 - 1 (see number of loops in mandel() function)
-    // var e: u8 = 1;
-    var col = mix(vec3(0.008, 0.0, 0.08), vec3(.03, 0.0, 0.0), mand_val % 5.0 / 4.0); // what color should it be if outside of set
-    var background = vec3(0.0);
-    col = mix(col, background, step(f32(u32(lodf) - u32(1)), mand_val)); // should it have outside or inside color
+    //var col: vec3<f32> = mix(mix(vec3(0.0), vec3(1.0), -length(newpos)), vec3(0.0,0.0,1.0), length(newpos));
+    var col = mix(vec3(0.0), vec3(1.0), step(0.0, newpos.y - newpos.x));
 
     return vec4<f32>(col, 1.0);
 
@@ -124,7 +99,7 @@ fn abs_sq(in: Complex) -> f32 {
 fn mandel(c: Complex) -> u32 {
     var z = Complex(0.0, 0.0);
     var i: u32 = u32(0);
-    while (i < u32(round(lodf))){
+    while (i < u32(round(10.0))){
         i += u32(1);
         z = mandel_iter(z, c);
         if abs_sq(z) > 4.0 {

@@ -1,12 +1,17 @@
 const ZOOM_BASE: f32 = 1.3;
 
-const LEN: usize = 15;
+const FALLBACK_RESOLUTION: winit::dpi::PhysicalSize<u32> = winit::dpi::PhysicalSize::new(800, 600);
+
+const LEN: usize = 6;
 
 use wgpu::{PipelineLayoutDescriptor, RenderPipelineDescriptor, util::DeviceExt};
 use winit::{event::KeyEvent, keyboard::KeyCode};
 fn main(){
     let event_loop = winit::event_loop::EventLoop::new().unwrap();
-    let primary_size = event_loop.primary_monitor().unwrap().size();
+    let primary_size = match event_loop.primary_monitor(){
+        Some(v) => v.size(),
+        None => FALLBACK_RESOLUTION
+    };
     // sure hope nobody has a monitor less than 10 pixels 
     let window = winit::window::WindowBuilder::new()
         // .with_min_inner_size(winit::dpi::PhysicalSize{width,height,})
@@ -25,28 +30,6 @@ struct Sphere{
     color: [f32; 3]
 }
 
-// impl Sphere{
-//     fn as_wgpu_aligned_bytes(&self) -> &[u8]{
-//         &[
-//             // <position>
-//             bytemuck::cast::<f32, [u8 ; 4]>(self.position[0]),
-//                 bytemuck::cast::<f32, [u8 ; 4]>(self.position[1]),
-//                 bytemuck::cast::<f32, [u8 ; 4]>(self.position[2]),
-//                 bytemuck::cast::<f32, [u8 ; 4]>(f32::default()), // 16 bytes - vec3<f32>
-//             // </position>
-//             // <color>
-//             bytemuck::cast::<f32, [u8 ; 4]>(self.color[0]),
-//                 bytemuck::cast::<f32, [u8 ; 4]>(self.color[1]),
-//                 bytemuck::cast::<f32, [u8 ; 4]>(self.color[2]),
-//                 bytemuck::cast::<f32, [u8 ; 4]>(f32::default()), // 16 bytes - vec3<f32>
-//             // </color>
-//             // <radius>
-//             bytemuck::cast::<f32, [u8 ; 4]>(self.radius) // 4 bytes - f32
-//             // </radius>
-//         ].into_iter().flatten().collect::<Box<[u8]>>()
-//         // jesus christ
-//     }
-// }
 
 async fn run(event_loop: winit::event_loop::EventLoop<()>, window: winit::window::Window) {
     let mut size = window.inner_size();
@@ -67,14 +50,11 @@ async fn run(event_loop: winit::event_loop::EventLoop<()>, window: winit::window
         },
         None
     ).await.expect("couldn't find an adequate device");
-    let mandel_commands: &mut [f32; LEN] = &mut [
+    let mandel_commands: &mut [f32] = &mut [  // FIXME!!!!!!!!!!!!!!!!!!!!!!
         size.width as f32, size.height as f32, // screen dimensions
-        0.0, 0.0, // linear offset
-        4.0, // zoom
-        1.0, // level of detail (num mandel iterations)
-        0.0, 0.0, 0.0, 0.0,// sphere position (plus padding)
-        1.0, 0.0, 0.0, 0.0, // sphere color (plus padding)
-        0.5, // sphere radius
+        0.0, 0.0, // sphere pos
+        0.25,  // sphere radius
+        0.0
     ];
     let staging_mandel_commands_buffer = device.create_buffer(&wgpu::BufferDescriptor{
         label: None,
@@ -205,6 +185,7 @@ async fn run(event_loop: winit::event_loop::EventLoop<()>, window: winit::window
                 frame.present();
             },
             winit::event::WindowEvent::CloseRequested => target.exit(),
+            // winit::event::WindowEvent::KeyboardInput{event: winit::keyboard::Keyevent{..}, ..} =>(),
             _ => (),
             }
         }
