@@ -4,8 +4,13 @@ const FALLBACK_RESOLUTION: winit::dpi::PhysicalSize<u32> = winit::dpi::PhysicalS
 
 const LEN: usize = 12;
 
+const NUM_SPHERES: u32 = 4;
+
+const LIGHT_MOVEMENT_STEP: f32 = 1. / 32.;
+
 use std::{f32::consts::PI, collections::HashMap};
 
+use rand::Rng;
 use wgpu::{PipelineLayoutDescriptor, RenderPipelineDescriptor, util::{DeviceExt, BufferInitDescriptor}};
 use winit::{event::{KeyEvent, ElementState, self}, keyboard::KeyCode};
 fn main(){
@@ -56,12 +61,17 @@ async fn run(event_loop: winit::event_loop::EventLoop<()>, window: winit::window
     let mandel_commands: &mut [f32] = &mut [
         size.width as f32, size.height as f32, 0.0, 0.0, // screen dimensions + 2 unused f32
         0.0, 0.0, 0.0, PI / 2.0, // camera position + fov
-        0.0, 1.0, -5.0, 0.3, // light position + light tolerance
+        0.0, 1.0, -5.0, 0.3, // light position + light distance
     ];
-    let spheres: &mut [f32] = &mut [
-        0.0, 0.0, -5.0, 0.25,// sphere position + radius
-        0.0, 1.0, 0.0, 0.0, // circle color + unused f32
-    ];
+    let mut spheres: Vec<f32> = Vec::from([
+        0.0, 0.0, -6.0, 0.25,// sphere position + radius
+        0.0, 1.0, 0.0, 0.0,  // sphere color 
+        0.0, -0.1, -3.0, 0.1,
+        1.0, 0.0, 0.0, 0.0, 
+    ]);
+
+    append_random_spheres(&mut spheres, NUM_SPHERES);
+
     let staging_mandel_commands_buffer = device.create_buffer(&wgpu::BufferDescriptor{
         label: None,
         size: (std::mem::size_of::<f32>() * LEN) as u64,
@@ -76,15 +86,17 @@ async fn run(event_loop: winit::event_loop::EventLoop<()>, window: winit::window
     });
     let staging_spheres_buffer = device.create_buffer(&wgpu::BufferDescriptor{
         label: None,
-        size: std::mem::size_of_val(&spheres) as u64,
+        size: 32 * std::mem::size_of::<f32>() as u64,
         usage: wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::MAP_WRITE,
         mapped_at_creation: false,
     });
-    let spheres_buffer = device.create_buffer_init(&BufferInitDescriptor{
+    let spheres_buffer = device.create_buffer(&wgpu::BufferDescriptor{
         label: None,
-        contents: bytemuck::cast_slice(spheres),
+        size: 32 * std::mem::size_of::<f32>() as u64,
         usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+        mapped_at_creation: false,
     });
+
     let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor{
         label: None,
         entries: &[
@@ -171,12 +183,15 @@ async fn run(event_loop: winit::event_loop::EventLoop<()>, window: winit::window
         view_formats: vec![],
     };
     surface.configure(&device, &config);
-    let kb: HashMap<KeyCode, bool> = std::collections::HashMap::new();
+
+    let mut kb: HashMap<KeyCode, ElementState> = std::collections::HashMap::new();
+
     event_loop.run(
     move |event, target|{
         // so they get cleaned up since run() never returns
         let _ = (&instance, &adapter, &shader, &pipeline_layout);
         let mut is_mandel_update = false;
+        let mut is_spheres_update = false;
         match event {
         winit::event::Event::WindowEvent{event: v, ..} => {
         match v {
@@ -222,42 +237,19 @@ async fn run(event_loop: winit::event_loop::EventLoop<()>, window: winit::window
                 frame.present();
             },
             winit::event::WindowEvent::CloseRequested => target.exit(),
-            winit::event::WindowEvent::KeyboardInput { event: KeyEvent{ physical_key: winit::keyboard::PhysicalKey::Code(key), state, .. }, .. } =>{
+            winit::event::WindowEvent::KeyboardInput { event: KeyEvent{ physical_key: winit::keyboard::PhysicalKey::Code(key), state, repeat, .. }, .. } =>{
+                kb.insert(key, state);
+                match (key, state){
+                    (KeyCode::Space, ElementState::Pressed) if !repeat =>{
+                        if let KeyCode::Space = key{
+                            spheres.clear();
+                            append_random_spheres(&mut spheres, NUM_SPHERES );
+                            is_spheres_update = true;
+                        }
+                    },
+                    _ => (),
+                }
                 // kb.insert(key, state);
-                let mut delta = (0., 0., 0., 0.0);
-                if let KeyCode::KeyO = key{
-                    delta.2 += -0.125;
-                }
-                if let KeyCode::KeyL = key{
-                    delta.2 += 0.125;
-                }
-                if let KeyCode::KeyK = key{
-                    delta.0 += -0.125;
-                }
-                if let KeyCode::Semicolon = key{
-                    delta.0 += 0.125;
-                }
-                if let KeyCode::KeyJ = key{
-                    delta.1 += -0.125;
-                }
-                if let KeyCode::KeyU = key{
-                    delta.1 += 0.125;
-                }
-                if let KeyCode::Minus= key{
-                    delta.3 += 0.125;
-                }
-                if let KeyCode::Equal = key{
-                    delta.3 += -0.125;
-                }
-                if delta != (0.,0.,0.,0.0){
-                    //8,9,10
-                    mandel_commands[8] += delta.0;
-                    mandel_commands[9] += delta.1;
-                    mandel_commands[10] += delta.2;
-                    mandel_commands[7] += delta.3;
-                    is_mandel_update = true;
-                    println!("x:\t{}\ny:\t{}\nz:\t{}\nzoom:\t{}\n", mandel_commands[8], mandel_commands[9], mandel_commands[10], mandel_commands[7]);
-                }
             },
 
             // winit::event::WindowEvent::KeyboardInput{event: winit::keyboard::Keyevent{..}, ..} =>(),
@@ -265,7 +257,45 @@ async fn run(event_loop: winit::event_loop::EventLoop<()>, window: winit::window
             }
         },
         winit::event::Event::AboutToWait =>{
-               
+            for (key, value) in kb.iter(){
+                if let ElementState::Released = value{
+                    continue;
+                }
+                let mut delta = (0., 0., 0., 0.0);
+                if let KeyCode::KeyO = key{
+                    delta.2 += -LIGHT_MOVEMENT_STEP;
+                }
+                if let KeyCode::KeyL = key{
+                    delta.2 += LIGHT_MOVEMENT_STEP;
+                }
+                if let KeyCode::KeyK = key{
+                    delta.0 += -LIGHT_MOVEMENT_STEP;
+                }
+                if let KeyCode::Semicolon = key{
+                    delta.0 += LIGHT_MOVEMENT_STEP;
+                }
+                if let KeyCode::KeyJ = key{
+                    delta.1 += -LIGHT_MOVEMENT_STEP;
+                }
+                if let KeyCode::KeyU = key{
+                    delta.1 += LIGHT_MOVEMENT_STEP;
+                }
+                if let KeyCode::Minus= key{
+                    delta.3 += LIGHT_MOVEMENT_STEP;
+                }
+                if let KeyCode::Equal = key{
+                    delta.3 += -LIGHT_MOVEMENT_STEP;
+                }
+
+                    //8,9,10
+                mandel_commands[8] += delta.0;
+                mandel_commands[9] += delta.1;
+                mandel_commands[10] += delta.2;
+                mandel_commands[7] += delta.3;
+                is_mandel_update = true;
+                println!("x:\t{}\ny:\t{}\nz:\t{}\nzoom:\t{}\n", mandel_commands[8], mandel_commands[9], mandel_commands[10], mandel_commands[7]);
+
+            }
         },
         _=>(),
         }
@@ -291,6 +321,44 @@ async fn run(event_loop: winit::event_loop::EventLoop<()>, window: winit::window
             }
             window.request_redraw();
         }
+        if is_spheres_update{
+            // dbg!(&mandel_commands);
+            let (sender, receiver) = flume::bounded(1);
+            let slice = staging_spheres_buffer.slice(..);
+            slice.map_async(wgpu::MapMode::Write, move |v| sender.send(v).unwrap());
+            device.poll(wgpu::Maintain::Wait);
+
+            if let Ok(Ok(())) = receiver.recv(){
+                let mut mapped = slice.get_mapped_range_mut();
+                mapped.clone_from_slice(bytemuck::cast_slice(&spheres));
+                drop(mapped);
+                staging_spheres_buffer.unmap();
+                let mut encoder = device.create_command_encoder(&Default::default());
+                encoder.copy_buffer_to_buffer(
+                    &staging_spheres_buffer, 0,
+                    &spheres_buffer, 0,
+                    (std::mem::size_of::<f32>() * (NUM_SPHERES * 8) as usize) as u64,
+                );
+                queue.submit(Some(encoder.finish()));
+            }
+            window.request_redraw();
+        }
     })
     .unwrap();
 }
+ fn append_random_spheres(spheres: &mut Vec<f32>, n: u32){
+    (0..n).into_iter().for_each(|_|{
+        let mut r = rand::thread_rng();
+        let mut e = vec![];
+        for _ in 0..7{e.push(r.gen::<f32>())}
+        let z = -2.0 + (-e[0] * 10.0);
+        let x = e[1] * 2.0;
+        let y = e[2] * 2.0;
+        let rad = e[3];
+        let r = e[4].max(0.3);
+        let g = e[5].max(0.3);
+        let b = e[6].max(0.3);
+        spheres.append(&mut vec![x,y,z,rad,r,g,b,0.]);
+        
+    });
+ }

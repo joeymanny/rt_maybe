@@ -17,7 +17,7 @@ const void_color: vec3<f32> = vec3(0.0);
 
 const far_clip: f32 = 20.0;
 
-const step_length = .1;
+const step_length = .01;
 
 @fragment
 fn fs_main(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
@@ -50,21 +50,27 @@ fn fs_main(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
 
     var counter = 0;
 
+    var dist = total_distance(ray);
+
     while (length(ray) < far_clip && go){
-        ray *= (total_distance(ray) + length(ray)) / length(ray);
-        if sphere_sdf(ray, spheres[0]) < 0.0001 {
-            col = spheres[0].col.xyz;
+        ray *= (dist + length(ray)) / length(ray);//+= dist * og_ray;
+        dist = total_distance(ray);
+        if dist < 0.0001 {
+            col = closest_sphere(ray).col.xyz;
             go = false;
-            var shadow_step = normalize(cmd.light.xyz - ray) * step_length;
+            let points_to_light = normalize(cmd.light.xyz - ray);
             var inner_go = true;
-            while (length(ray) < far_clip && inner_go && length(cmd.light.xyz - ray) > cmd.light.w){
-                ray += shadow_step;
-                if sphere_sdf(ray, spheres[0]) < 0.0001 {
+            while (length(ray) < far_clip && inner_go ){
+                ray += vec3(points_to_light * step_length);
+                dist = dist_excluding_light(ray);
+                if dist < 0. {
                     col = col * vec3(0.01);
                     inner_go = false;
                 }
             }
-        }else if length(cmd.light.xyz - ray) < 0.1{
+            continue;
+        }
+        if length(cmd.light.xyz - ray) < .1{
             col = vec3(1.0, 0.0, 1.0,);
             go = false;
         }
@@ -76,11 +82,31 @@ fn fs_main(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
 }
 
 fn total_distance(point: vec3<f32>) -> f32{
-    var min: f32 = 0.0;
-    for(var i: u32 = 1; i < arrayLength( &spheres ); i++){
-        min = min(min(point, spheres[i]));
+    var min = length(point - cmd.light.xyz);
+    for(var i: u32 = u32(0); i < arrayLength( &spheres ); i++){
+        min = min(min, sphere_sdf(point, spheres[i]));
     }
-    min = min(min, abs(point - cmd.light.xyz));
+    return min;
+}
+
+fn closest_sphere(point: vec3<f32>) -> Sphere{
+    var ans = u32(0);
+    var min = sphere_sdf(point, spheres[ans]);
+    for (var i = u32(0); i < arrayLength(&spheres); i++){
+        let contestant = sphere_sdf(point, spheres[i]);
+        if contestant < min{
+            min = contestant;
+            ans = i;
+        }
+    }
+    return (spheres[ans]);
+}
+
+fn dist_excluding_light(point: vec3<f32>) -> f32{
+    var min = sphere_sdf(point, spheres[0]);
+    for(var i: u32 = u32(1); i < arrayLength( &spheres ); i++){
+        min = min(min, sphere_sdf(point, spheres[i]));
+    }
     return min;
 }
 
