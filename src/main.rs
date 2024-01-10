@@ -2,11 +2,11 @@ const ZOOM_BASE: f32 = 1.3;
 
 const FALLBACK_RESOLUTION: winit::dpi::PhysicalSize<u32> = winit::dpi::PhysicalSize::new(800, 600);
 
-const LEN: usize = 20;
+const LEN: usize = 12;
 
-use std::f32::consts::PI;
+use std::{f32::consts::PI, collections::HashMap};
 
-use wgpu::{PipelineLayoutDescriptor, RenderPipelineDescriptor, util::DeviceExt};
+use wgpu::{PipelineLayoutDescriptor, RenderPipelineDescriptor, util::{DeviceExt, BufferInitDescriptor}};
 use winit::{event::{KeyEvent, ElementState, self}, keyboard::KeyCode};
 fn main(){
     let event_loop = winit::event_loop::EventLoop::new().unwrap();
@@ -57,6 +57,8 @@ async fn run(event_loop: winit::event_loop::EventLoop<()>, window: winit::window
         size.width as f32, size.height as f32, 0.0, 0.0, // screen dimensions + 2 unused f32
         0.0, 0.0, 0.0, PI / 2.0, // camera position + fov
         0.0, 1.0, -5.0, 0.3, // light position + light tolerance
+    ];
+    let spheres: &mut [f32] = &mut [
         0.0, 0.0, -5.0, 0.25,// sphere position + radius
         0.0, 1.0, 0.0, 0.0, // circle color + unused f32
     ];
@@ -72,30 +74,63 @@ async fn run(event_loop: winit::event_loop::EventLoop<()>, window: winit::window
         usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST
 
     });
+    let staging_spheres_buffer = device.create_buffer(&wgpu::BufferDescriptor{
+        label: None,
+        size: std::mem::size_of_val(&spheres) as u64,
+        usage: wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::MAP_WRITE,
+        mapped_at_creation: false,
+    });
+    let spheres_buffer = device.create_buffer_init(&BufferInitDescriptor{
+        label: None,
+        contents: bytemuck::cast_slice(spheres),
+        usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+    });
     let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor{
         label: None,
-        entries: &[wgpu::BindGroupLayoutEntry{
-            binding: 0,
-            visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-            ty: wgpu::BindingType::Buffer{
-                ty: wgpu::BufferBindingType::Uniform,
-                has_dynamic_offset: false,
-                min_binding_size: None,
+        entries: &[
+            wgpu::BindGroupLayoutEntry{
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                ty: wgpu::BindingType::Buffer{
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
             },
-            count: None,
-        }]
+            wgpu::BindGroupLayoutEntry{
+                binding: 1,
+                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                ty: wgpu::BindingType::Buffer{
+                    ty: wgpu::BufferBindingType::Storage { read_only: true },
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            },
+        ]
     });
     let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor{
         label: None,
         layout: &bind_group_layout,
-        entries: &[wgpu::BindGroupEntry{
-            binding: 0,
-            resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding{
-                buffer: &mandel_commands_buffer,
-                offset: 0,
-                size: None,
-            })
-        }]
+        entries: &[
+            wgpu::BindGroupEntry{
+                binding: 0,
+                resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding{
+                    buffer: &mandel_commands_buffer,
+                    offset: 0,
+                    size: None,
+                })
+            },
+            wgpu::BindGroupEntry{
+                binding: 1,
+                resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding{
+                    buffer: &spheres_buffer,
+                    offset: 0,
+                    size: None,
+                })
+            },
+        ]
     });
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor{
         label: None,
@@ -136,17 +171,15 @@ async fn run(event_loop: winit::event_loop::EventLoop<()>, window: winit::window
         view_formats: vec![],
     };
     surface.configure(&device, &config);
-
+    let kb: HashMap<KeyCode, bool> = std::collections::HashMap::new();
     event_loop.run(
     move |event, target|{
         // so they get cleaned up since run() never returns
         let _ = (&instance, &adapter, &shader, &pipeline_layout);
         let mut is_mandel_update = false;
-        if let winit::event::Event::WindowEvent {
-            event, // shadowing
-            window_id: _
-        } = event {
         match event {
+        winit::event::Event::WindowEvent{event: v, ..} => {
+        match v {
             winit::event::WindowEvent::Resized(new_size) => {
                 config.width = new_size.width.max(1);
                 config.height = new_size.height.max(1);
@@ -189,7 +222,8 @@ async fn run(event_loop: winit::event_loop::EventLoop<()>, window: winit::window
                 frame.present();
             },
             winit::event::WindowEvent::CloseRequested => target.exit(),
-            winit::event::WindowEvent::KeyboardInput { event: KeyEvent{ physical_key: winit::keyboard::PhysicalKey::Code(key), state: ElementState::Pressed, .. }, .. } =>{
+            winit::event::WindowEvent::KeyboardInput { event: KeyEvent{ physical_key: winit::keyboard::PhysicalKey::Code(key), state, .. }, .. } =>{
+                // kb.insert(key, state);
                 let mut delta = (0., 0., 0., 0.0);
                 if let KeyCode::KeyO = key{
                     delta.2 += -0.125;
@@ -224,13 +258,16 @@ async fn run(event_loop: winit::event_loop::EventLoop<()>, window: winit::window
                     is_mandel_update = true;
                     println!("x:\t{}\ny:\t{}\nz:\t{}\nzoom:\t{}\n", mandel_commands[8], mandel_commands[9], mandel_commands[10], mandel_commands[7]);
                 }
-
-
             },
 
             // winit::event::WindowEvent::KeyboardInput{event: winit::keyboard::Keyevent{..}, ..} =>(),
             _ => (),
             }
+        },
+        winit::event::Event::AboutToWait =>{
+               
+        },
+        _=>(),
         }
         if is_mandel_update{
             // dbg!(&mandel_commands);
