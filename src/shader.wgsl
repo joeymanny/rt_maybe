@@ -42,7 +42,7 @@ fn fs_main(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
 
     var ray = normalize(vec3(newpos * view_plane_scalar, 0.0) + view_plane_offset);
 
-    let og_ray = ray;
+    let ray_heading = ray;
 
     var col: vec3<f32> = void_color;
 
@@ -53,7 +53,7 @@ fn fs_main(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     var dist = total_distance(ray);
 
     while (length(ray) < far_clip && go){
-        ray *= (dist + length(ray)) / length(ray);//+= dist * og_ray;
+        ray += dist * ray_heading;//+= dist * ray_heading;
         dist = total_distance(ray);
         if dist < 0.0001 {
             col = closest_sphere(ray).col.xyz;
