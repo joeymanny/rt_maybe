@@ -4,15 +4,15 @@ const FALLBACK_RESOLUTION: winit::dpi::PhysicalSize<u32> = winit::dpi::PhysicalS
 
 const LEN: usize = 12;
 
-const NUM_SPHERES: u32 = 4;
+const NUM_SPHERES: u32 = 2;
 
 const LIGHT_MOVEMENT_STEP: f32 = 1. / 32.;
 
 use std::{f32::consts::PI, collections::HashMap};
 
 use rand::Rng;
-use wgpu::{PipelineLayoutDescriptor, RenderPipelineDescriptor, util::{DeviceExt, BufferInitDescriptor}};
-use winit::{event::{KeyEvent, ElementState, self}, keyboard::KeyCode};
+use wgpu::{PipelineLayoutDescriptor, RenderPipelineDescriptor, util::{DeviceExt,}};
+use winit::{event::{KeyEvent, ElementState}, keyboard::KeyCode};
 fn main(){
     let event_loop = winit::event_loop::EventLoop::new().unwrap();
     event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
@@ -29,13 +29,6 @@ fn main(){
         .unwrap();
     env_logger::init();
     pollster::block_on(run(event_loop, window));
-}
-
-#[derive(Debug)]
-struct Sphere{
-    position: [f32; 3],
-    radius: f32,
-    color: [f32; 3]
 }
 
 
@@ -86,13 +79,13 @@ async fn run(event_loop: winit::event_loop::EventLoop<()>, window: winit::window
     });
     let staging_spheres_buffer = device.create_buffer(&wgpu::BufferDescriptor{
         label: None,
-        size: 32 * std::mem::size_of::<f32>() as u64,
+        size: NUM_SPHERES as u64 * 8 * std::mem::size_of::<f32>() as u64,
         usage: wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::MAP_WRITE,
         mapped_at_creation: false,
     });
     let spheres_buffer = device.create_buffer(&wgpu::BufferDescriptor{
         label: None,
-        size: 32 * std::mem::size_of::<f32>() as u64,
+        size: NUM_SPHERES as u64 * 8 * std::mem::size_of::<f32>() as u64,
         usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
         mapped_at_creation: false,
     });
@@ -186,6 +179,7 @@ async fn run(event_loop: winit::event_loop::EventLoop<()>, window: winit::window
 
     let mut kb: HashMap<KeyCode, ElementState> = std::collections::HashMap::new();
 
+    let mut select_buf = String::new();
     event_loop.run(
     move |event, target|{
         // so they get cleaned up since run() never returns
@@ -249,6 +243,36 @@ async fn run(event_loop: winit::event_loop::EventLoop<()>, window: winit::window
                     },
                     _ => (),
                 }
+                if let ElementState::Pressed = state{
+                    if let Some(&ElementState::Pressed) = kb.get(&KeyCode::AltLeft){
+                        match key{
+                            KeyCode::Digit0 => select_buf.push('0'),
+                            KeyCode::Digit1 => select_buf.push('1'),
+                            KeyCode::Digit2 => select_buf.push('2'),
+                            KeyCode::Digit3 => select_buf.push('3'),
+                            KeyCode::Digit4 => select_buf.push('4'),
+                            KeyCode::Digit5 => select_buf.push('5'),
+                            KeyCode::Digit6 => select_buf.push('6'),
+                            KeyCode::Digit7 => select_buf.push('7'),
+                            KeyCode::Digit8 => select_buf.push('8'),
+                            KeyCode::Digit9 => select_buf.push('9'),
+                            _=>()
+                        }
+                    }
+                }else{ //key just released
+                    if let KeyCode::AltLeft = key{
+                        println!("{}",select_buf);
+                        if let Ok(mut v) = select_buf.parse::<u32>(){
+                            v *= 6; // six floats per sphere
+                            v += 3; // get to color part
+                            if let Some(r) = spheres.get_mut(v as usize){
+                                *r = 1.0;
+                                is_spheres_update = true;
+                            }
+                        }
+                        select_buf.clear();
+                    }
+                }
                 // kb.insert(key, state);
             },
 
@@ -302,7 +326,7 @@ async fn run(event_loop: winit::event_loop::EventLoop<()>, window: winit::window
                 mandel_commands[10] += delta.2;
                 mandel_commands[7] += delta.3;
                 is_mandel_update = true;
-                println!("x:\t{}\ny:\t{}\nz:\t{}\nzoom:\t{}\n", mandel_commands[8], mandel_commands[9], mandel_commands[10], mandel_commands[7]);
+                // println!("x:\t{}\ny:\t{}\nz:\t{}\nzoom:\t{}\n", mandel_commands[8], mandel_commands[9], mandel_commands[10], mandel_commands[7]);
 
             }
         },
@@ -361,8 +385,8 @@ async fn run(event_loop: winit::event_loop::EventLoop<()>, window: winit::window
         let mut e = vec![];
         for _ in 0..7{e.push(r.gen::<f32>())}
         let z = -2.0 + (-e[0] * 10.0);
-        let x = e[1] * 2.0;
-        let y = e[2] * 2.0;
+        let x = (e[1] * 4.0) - 2.0;
+        let y = (e[2] * 4.0) - 2.0;
         let rad = e[3];
         let r = e[4].max(0.3);
         let g = e[5].max(0.3);
