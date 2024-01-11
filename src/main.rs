@@ -268,10 +268,20 @@ async fn run(event_loop: winit::event_loop::EventLoop<()>, window: winit::window
                     if let KeyCode::AltLeft = key{
                         println!("{}",select_buf);
                         if let Ok(mut v) = select_buf.parse::<u32>(){
-                            v *= 6; // six floats per sphere
-                            v += 3; // get to color part
+                            v *= 8; // six floats per sphere
+                            v += 4; // get to color part
                             if let Some(r) = spheres.get_mut(v as usize){
                                 *r = 1.0;
+                                is_spheres_update = true;
+                            }
+                            v += 1;
+                            if let Some(r) = spheres.get_mut(v as usize){
+                                *r = 0.0;
+                                is_spheres_update = true;
+                            }
+                            v += 1;
+                            if let Some(r) = spheres.get_mut(v as usize){
+                                *r = 0.0;
                                 is_spheres_update = true;
                             }
                         }
