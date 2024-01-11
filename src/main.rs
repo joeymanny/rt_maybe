@@ -61,7 +61,7 @@ async fn run(event_loop: winit::event_loop::EventLoop<()>, window: winit::window
     let mandel_commands: &mut [f32] = &mut [
         size.width as f32, size.height as f32, 0.0, 0.0, // screen dimensions + 2 unused f32
         0.0, 0.0, 0.0, PI / 2.0, // camera position + fov
-        0.0, 1.0, -5.0, 0.3, // light position + light distance
+        0.0, 1.0, -5.0, 1.0, // light position + controlled by `[`/`]`
     ];
     let mut spheres: Vec<f32> = Vec::from([
         0.0, 0.0, -6.0, 0.25,// sphere position + radius
@@ -286,6 +286,15 @@ async fn run(event_loop: winit::event_loop::EventLoop<()>, window: winit::window
                 if let KeyCode::Equal = key{
                     delta.3 += -LIGHT_MOVEMENT_STEP;
                 }
+                if let KeyCode::BracketRight = key{
+                    mandel_commands[11] *= 1.01;
+                    println!("arb: {}", mandel_commands[11]);
+                }
+                if let KeyCode::BracketLeft = key{
+                    mandel_commands[11] /= 1.01;
+                    println!("arb: {}", mandel_commands[11]);
+                }
+
 
                     //8,9,10
                 mandel_commands[8] += delta.0;
