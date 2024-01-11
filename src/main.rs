@@ -8,11 +8,13 @@ const NUM_SPHERES: u32 = 2;
 
 const LIGHT_MOVEMENT_STEP: f32 = 1. / 32.;
 
+const DEGREE: f32 = PI / 180.0;
+
 use std::{f32::consts::PI, collections::HashMap};
 
 use rand::Rng;
 use wgpu::{PipelineLayoutDescriptor, RenderPipelineDescriptor, util::{DeviceExt,}};
-use winit::{event::{KeyEvent, ElementState}, keyboard::KeyCode};
+use winit::{event::{KeyEvent, ElementState}, keyboard::{KeyCode, Key}};
 fn main(){
     let event_loop = winit::event_loop::EventLoop::new().unwrap();
     event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
@@ -235,12 +237,15 @@ async fn run(event_loop: winit::event_loop::EventLoop<()>, window: winit::window
                 kb.insert(key, state);
                 match (key, state){
                     (KeyCode::Space, ElementState::Pressed) if !repeat =>{
-                        if let KeyCode::Space = key{
                             spheres.clear();
-                            append_random_spheres(&mut spheres, NUM_SPHERES );
+                            append_random_spheres(&mut spheres, NUM_SPHERES);
                             is_spheres_update = true;
-                        }
                     },
+                    (KeyCode::KeyQ, ElementState::Pressed) if !repeat => {
+                        spheres.truncate(spheres.len() - 8);
+                        spheres.append(&mut vec![-0.5 - f32::EPSILON * 32., 0.0, -10., 0.5, 0.0, 0.0, 1.0, 0.0]);
+                        is_spheres_update = true;
+                    }
                     _ => (),
                 }
                 if let ElementState::Pressed = state{
@@ -305,10 +310,10 @@ async fn run(event_loop: winit::event_loop::EventLoop<()>, window: winit::window
                     delta.1 += LIGHT_MOVEMENT_STEP;
                 }
                 if let KeyCode::Minus= key{
-                    delta.3 += LIGHT_MOVEMENT_STEP;
+                    delta.3 += DEGREE;
                 }
                 if let KeyCode::Equal = key{
-                    delta.3 += -LIGHT_MOVEMENT_STEP;
+                    delta.3 -= DEGREE;
                 }
                 if let KeyCode::BracketRight = key{
                     mandel_commands[11] *= 1.01;
@@ -324,7 +329,7 @@ async fn run(event_loop: winit::event_loop::EventLoop<()>, window: winit::window
                 mandel_commands[8] += delta.0;
                 mandel_commands[9] += delta.1;
                 mandel_commands[10] += delta.2;
-                mandel_commands[7] += delta.3;
+                mandel_commands[7] = (mandel_commands[7] + delta.3).max(f32::EPSILON);
                 is_mandel_update = true;
                 // println!("x:\t{}\ny:\t{}\nz:\t{}\nzoom:\t{}\n", mandel_commands[8], mandel_commands[9], mandel_commands[10], mandel_commands[7]);
 
