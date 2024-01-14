@@ -42,22 +42,49 @@ fn fs_main(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
 
     var ray = normalize(vec3(newpos * view_plane_scalar, 0.0) + view_plane_offset);
 
-    var col = void_color;
+    var col = vec3(0.);
+
+    var least_dist = 100000000000000000.0;
+
+    var colliding_sphere: u32;
 
     // col = vec3(line_circle_intercect(ray, spheres[1]) * 20.0);
     for (var i = u32(0); i < u32(arrayLength(&spheres)); i++){
-        if line_circle_intercect(ray, spheres[i]) >= 0.0{
-        col = spheres[i].col.xyz;
+        let dist_intersect = line_circle_intersect(ray, spheres[i]);
+        if (dist_intersect > 0.0 && dist_intersect < least_dist){
+            least_dist = dist_intersect;
+            col = spheres[i].col.xyz;
+            colliding_sphere = i;
+        }
     }
-    }
+
 
 
     return vec4<f32>(col, 1.0);
 
 }
 
-fn line_circle_intercect(ray: vec3<f32>, sphere: Sphere) -> f32{
-    return (pow(dot(ray, (view_plane_offset - sphere.pos.xyz)), 2.0) - (pow(length(view_plane_offset - sphere.pos.xyz), 2.0) - pow(sphere.pos.w, 2.0)));
+fn is_line_intersecting_sphere(ray: vec3<f32>, sphere: Sphere) -> bool{
+    return line_circle_intersect(ray, sphere) >= 0.0;
+}
+
+// fn line_circle_intersect(ray: vec3<f32>, sphere: Sphere) -> f32{
+//     return (pow(dot(ray, (view_plane_offset - sphere.pos.xyz)), 2.0) - (pow(length(view_plane_offset - sphere.pos.xyz), 2.0) - pow(sphere.pos.w, 2.0)));
+// }
+fn line_circle_intersect(ray: vec3<f32>, sphere: Sphere) -> f32{
+    let to_be_sqrt = 
+    
+            pow(dot(ray, view_plane_offset - sphere.pos.xyz), 2.0)
+        
+        - pow(length(ray), 2.0) * (pow(length(view_plane_offset - sphere.pos.xyz), 2.0) - pow(sphere.pos.w, 2.0))
+        ;
+    if to_be_sqrt < 0.0{
+        return to_be_sqrt;
+    }
+
+    return (-(dot(ray, view_plane_offset - sphere.pos.xyz)) 
+        + sqrt(to_be_sqrt)
+    ) / pow(length(ray), 2.0);
 }
 
 var<private> points: array<array<vec2<f32>, 2>, 3> = array<array<vec2<f32>, 2>, 3>(

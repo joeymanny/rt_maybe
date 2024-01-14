@@ -10,7 +10,7 @@ const LIGHT_MOVEMENT_STEP: f32 = 1. / 32.;
 
 const DEGREE: f32 = PI / 180.0;
 
-use std::{f32::consts::PI, collections::HashMap};
+use std::{f32::consts::PI, collections::HashMap, io::Read};
 
 use rand::Rng;
 use wgpu::{PipelineLayoutDescriptor, RenderPipelineDescriptor, util::{DeviceExt,}};
@@ -139,9 +139,14 @@ async fn run(event_loop: winit::event_loop::EventLoop<()>, window: winit::window
             },
         ]
     });
+    // ! REMOVE THIS!!!!!!!!!!!!!!!!!
+    let path = std::path::Path::new("./src/shader.wgsl");
+    let mut file = std::fs::File::open(path).expect("this is a rapid developement binary and requires a shader.wgsl to be present in the src directory");
+    let mut shader_string = String::new();
+    file.read_to_string(&mut shader_string).expect("couldn't read src/shader.wgsl to a string");
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor{
         label: None,
-        source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(include_str!("shader.wgsl")))
+        source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(&shader_string))
     });
     let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor{
         label: None,
@@ -406,7 +411,7 @@ async fn run(event_loop: winit::event_loop::EventLoop<()>, window: winit::window
         let r = e[4].max(0.3);
         let g = e[5].max(0.3);
         let b = e[6].max(0.3);
-        spheres.append(&mut vec![x,y,z,rad,r,g,b,0.]);
+        spheres.append(&mut dbg!(vec![x,y,z,rad,r,g,b,0.]));
         
     });
  }
