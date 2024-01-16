@@ -2,9 +2,11 @@ const ZOOM_BASE: f32 = 1.3;
 
 const FALLBACK_RESOLUTION: winit::dpi::PhysicalSize<u32> = winit::dpi::PhysicalSize::new(800, 600);
 
+const WINDOW_SIZE_FACTOR: f32 = 0.7;
+
 const LEN: usize = 12;
 
-const NUM_SPHERES: u32 = 2;
+const NUM_SPHERES: u32 = 10;
 
 const LIGHT_MOVEMENT_STEP: f32 = 1. / 32.;
 
@@ -19,7 +21,12 @@ fn main(){
     let event_loop = winit::event_loop::EventLoop::new().unwrap();
     event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
     let primary_size = match event_loop.primary_monitor(){
-        Some(v) => v.size(),
+        Some(v) => {
+            let mut ret = v.size();
+            ret.height = (ret.height as f32 * WINDOW_SIZE_FACTOR).round() as u32;
+            ret.width = (ret.width as f32 * WINDOW_SIZE_FACTOR).round() as u32;
+            ret
+        },
         None => FALLBACK_RESOLUTION
     };
     // sure hope nobody has a monitor less than 10 pixels 
@@ -191,7 +198,7 @@ async fn run(event_loop: winit::event_loop::EventLoop<()>, window: winit::window
     move |event, target|{
         // so they get cleaned up since run() never returns
         let _ = (&instance, &adapter, &shader, &pipeline_layout);
-        let mut is_mandel_update = false;
+        let mut is_cmd_update = false;
         let mut is_spheres_update = false;
         match event {
         winit::event::Event::WindowEvent{event: v, ..} => {
@@ -203,7 +210,7 @@ async fn run(event_loop: winit::event_loop::EventLoop<()>, window: winit::window
 
                 mandel_commands[0] = new_size.width as f32;
                 mandel_commands[1] = new_size.height as f32;
-                is_mandel_update = true;
+                is_cmd_update = true;
 
                 window.request_redraw();
             }
@@ -345,14 +352,14 @@ async fn run(event_loop: winit::event_loop::EventLoop<()>, window: winit::window
                 mandel_commands[9] += delta.1;
                 mandel_commands[10] += delta.2;
                 mandel_commands[7] = (mandel_commands[7] + delta.3).max(f32::EPSILON);
-                is_mandel_update = true;
+                is_cmd_update = true;
                 // println!("x:\t{}\ny:\t{}\nz:\t{}\nzoom:\t{}\n", mandel_commands[8], mandel_commands[9], mandel_commands[10], mandel_commands[7]);
 
             }
         },
         _=>(),
         }
-        if is_mandel_update{
+        if is_cmd_update{
             // dbg!(&mandel_commands);
             let (sender, receiver) = flume::bounded(1);
             let slice = staging_mandel_commands_buffer.slice(..);
@@ -411,7 +418,7 @@ async fn run(event_loop: winit::event_loop::EventLoop<()>, window: winit::window
         let r = e[4].max(0.3);
         let g = e[5].max(0.3);
         let b = e[6].max(0.3);
-        spheres.append(&mut dbg!(vec![x,y,z,rad,r,g,b,0.]));
+        spheres.append(&mut vec![x,y,z,rad,r,g,b,0.]);
         
     });
  }
