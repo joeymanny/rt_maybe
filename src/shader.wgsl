@@ -1,5 +1,6 @@
 @group(0) @binding(0) var<uniform> cmd: MandelCommands;
 @group(0) @binding(1) var<storage> spheres: array<Sphere>;
+
 struct MandelCommands{
     size: vec4<f32>,
     cam: vec4<f32>,
@@ -8,14 +9,34 @@ struct MandelCommands{
 
 struct Sphere{
     pos: vec4<f32>,
-    col: vec4<f32>,
+    material: Material,
 }
 
-const view_plane_offset: vec3<f32> = vec3(0.0, 0.0, 1.0);
+struct Material{
+    col: vec3<f32>,
+    roughness: f32,
+}
+
+struct HitInfo{
+    is_hit: bool,
+    dst: f32,
+    hit_point: vec3<f32>,
+    normal: vec3<f32>,
+    material: Material,
+}
+
+struct Ray{
+    origin: vec3<f32>,
+    dir: vec3<f32>,
+}
+
+const offset_ray_heading: vec3<f32> = vec3(0.0, 0.0, -1.0);
 
 const void_color: vec3<f32> = vec3(0.0);
 
 const surface_dodge: f32 = 0.1;
+
+const NUM_BOUNCES: u32 = u32(1);
 
 @fragment
 fn fs_main(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
@@ -38,92 +59,56 @@ fn fs_main(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
 
     var view_plane_scalar: f32 = tan(cmd.cam.w / 2.0);
 
-    var ray = normalize(vec3(newpos * view_plane_scalar, 0.0) + view_plane_offset);
+    var new_ray_origin: vec3<f32> = vec3(0.0);
 
-    let og_ray = ray;
+    var new_ray_dir: vec3<f32> = normalize(vec3(newpos.x, newpos.y, 0.0) + offset_ray_heading);
 
-    var col = vec3(0.);
+    var ray: Ray = Ray(new_ray_origin, new_ray_dir);
 
-    var least_dist = 100000000000000000.0;
+    var col = vec3(0.0);
 
-    var colliding_sphere: i32 = -1;
-
-    var normal: vec3<f32>;
-
-    var dist_intersect:f32;
-
-    // col = vec3(line_circle_intercect(ray, spheres[1]) * 20.0);
-    for (var i = u32(0); i < u32(arrayLength(&spheres)); i++){
-        dist_intersect = -line_circle_intersect(ray, spheres[i]);
-        if (dist_intersect > 0.0 && dist_intersect < least_dist){
-            normal = normalize(ray - spheres[i].pos.xyz);
-            least_dist = dist_intersect;
-            colliding_sphere = i32(i);
-        }
-    }
-
-    if colliding_sphere > -1{
-        col = spheres[colliding_sphere].col.xyz;
-        ray += normal * surface_dodge;
-        var collision_to_light = 100000000000000000.0;
-        for (var i = u32(0); i < u32(arrayLength(&spheres)); i++){
-            var s = spheres[i];
-            s.pos = vec4(s.pos.xyz - ray, s.pos.w);
-            let contestor = -line_circle_intersect(normalize(cmd.light.xyz - ray), s);
-            if contestor < collision_to_light{
-                collision_to_light = contestor;
+    var min_dst = 100000000.0;
+    for (var n = u32(1); n <= NUM_BOUNCES; n++){
+        var best_hit: HitInfo;
+        for (var i: u32 = u32(0); i < arrayLength(&spheres); i++){
+            let hit = line_sphere_intercect(ray, spheres[i]);
+            if hit.is_hit && hit.dst < min_dst{
+                min_dst = hit.dst;
+                best_hit = hit;
             }
         }
-        if collision_to_light < 100000000000000000.0{
-            col *= 0.3;
-        }
+        col += best_hit.material.col * sun_occlusion_factor(ray, best_hit);
     }
-
-    if -line_circle_intersect(og_ray, Sphere(cmd.light, vec4(0.0))) > 0.0{
-        col = vec3(1.0, 0.0, 1.0);
-    }
-
-
 
     return vec4<f32>(col, 1.0);
-
 }
 
-fn is_line_intersecting_sphere(ray: vec3<f32>, sphere: Sphere) -> bool{
-    return line_circle_intersect(ray, sphere) >= 0.0;
+fn sun_occlusion_factor(ray: Ray, hit: HitInfo) -> f32{
+    if !hit.is_hit{
+        return 0.0;
+    }
+    return max(0.0, dot(ray.dir, normalize(cmd.light.xyz - hit.hit_point)));
 }
 
-fn test(param: f32) -> (bool, f32){
-    return (false, f32(1.0));
-}
+fn line_sphere_intercect(ray: Ray, sphere: Sphere,) -> HitInfo {
+    var hit_info: HitInfo = HitInfo();
+    var offset_ray_origin: vec3<f32> = ray.origin - sphere.pos.xyz;
+    var a: f32 = dot(ray.dir, ray.dir);
+    var b: f32 = 2.0 * dot(offset_ray_origin, ray.dir);
+    var c: f32 = dot(offset_ray_origin, offset_ray_origin) - sphere.pos.w * sphere.pos.w;
+    var discriminant: f32 = b * b - 4.0* a * c;
+    if discriminant >= 0.0{
+        var dst: f32 = (-b - sqrt(discriminant)) / (2.0 * a);
 
-// fn line_circle_intersect(ray: vec3<f32>, sphere: Sphere) -> f32{
-//     return (pow(dot(ray, (view_plane_offset - sphere.pos.xyz)), 2.0) - (pow(length(view_plane_offset - sphere.pos.xyz), 2.0) - pow(sphere.pos.w, 2.0)));
-// }
-fn line_circle_intersect(ray: vec3<f32>, sphere: Sphere) -> f32{
-    let to_be_sqrt = 
-    
-            pow(dot(ray, view_plane_offset - sphere.pos.xyz), 2.0)
-        
-        - pow(length(ray), 2.0) * (pow(length(view_plane_offset - sphere.pos.xyz), 2.0) - pow(sphere.pos.w, 2.0))
-        ;
-    // if to_be_sqrt < 0.0{
-    //     return (to_be_sqrt);
-    // }
-
-    return (-(dot(ray, view_plane_offset - sphere.pos.xyz)) 
-        + sqrt(to_be_sqrt)
-    ) / pow(length(ray), 2.0);
-}
-
-var<private> points: array<array<vec2<f32>, 2>, 3> = array<array<vec2<f32>, 2>, 3>(
-    array<vec2<f32>, 2>(vec2(-1.), vec2(-1.)),
-    array<vec2<f32>, 2>(vec2<f32>(-1.0, 1.0), vec2<f32>(1., -1.)),
-    array<vec2<f32>, 2>(vec2(1.), vec2(1.)),
-);
-@vertex
-fn vs_main(@builtin(vertex_index) in_vertex_index: u32, @builtin(instance_index) instance_index: u32) -> @builtin(position) vec4<f32> {
-    return vec4<f32>(points[in_vertex_index][instance_index], 0.0, 1.0); // ITS A FUCKING SQUARE WHAT MORE DO YOU WANT FROM ME
+        if dst >= 0.0{
+            hit_info.is_hit = true;
+            hit_info.dst = dst;
+            hit_info.hit_point = ray.origin + ray.dir * dst;
+            hit_info.normal = normalize(hit_info.hit_point - sphere.pos.xyz);
+            hit_info.material = sphere.material;
+        }
+    }
+    return hit_info;
 }
 
 // https://github.com/SebLague/Ray-Tracing/blob/main/Assets/Scripts/Shaders/RayTracing.shader
@@ -154,3 +139,14 @@ fn vs_main(@builtin(vertex_index) in_vertex_index: u32, @builtin(instance_index)
 			// 	}
 			// 	return hitInfo;
 			// }
+
+
+var<private> points: array<array<vec2<f32>, 2>, 3> = array<array<vec2<f32>, 2>, 3>(
+    array<vec2<f32>, 2>(vec2(-1.), vec2(-1.)),
+    array<vec2<f32>, 2>(vec2<f32>(-1.0, 1.0), vec2<f32>(1., -1.)),
+    array<vec2<f32>, 2>(vec2(1.), vec2(1.)),
+);
+@vertex
+fn vs_main(@builtin(vertex_index) in_vertex_index: u32, @builtin(instance_index) instance_index: u32) -> @builtin(position) vec4<f32> {
+    return vec4<f32>(points[in_vertex_index][instance_index], 0.0, 1.0); // ITS A FUCKING SQUARE WHAT MORE DO YOU WANT FROM ME
+}
