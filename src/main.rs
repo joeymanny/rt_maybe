@@ -1,12 +1,10 @@
-const ZOOM_BASE: f32 = 1.3;
-
 const FALLBACK_RESOLUTION: winit::dpi::PhysicalSize<u32> = winit::dpi::PhysicalSize::new(800, 600);
 
 const WINDOW_SIZE_FACTOR: f32 = 0.7;
 
-const LEN: usize = 12;
+const LEN: usize = 16;
 
-const NUM_SPHERES: u32 = 10;
+const NUM_SPHERES: u32 = 30;
 
 const LIGHT_MOVEMENT_STEP: f32 = 1. / 32.;
 
@@ -15,8 +13,8 @@ const DEGREE: f32 = PI / 180.0;
 use std::{f32::consts::PI, collections::HashMap, io::Read};
 
 use rand::Rng;
-use wgpu::{PipelineLayoutDescriptor, RenderPipelineDescriptor, util::{DeviceExt,}};
-use winit::{event::{KeyEvent, ElementState}, keyboard::{KeyCode, Key}};
+use wgpu::{PipelineLayoutDescriptor, RenderPipelineDescriptor, util::DeviceExt};
+use winit::{event::{KeyEvent, ElementState}, keyboard::KeyCode};
 fn main(){
     let event_loop = winit::event_loop::EventLoop::new().unwrap();
     event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
@@ -42,6 +40,7 @@ fn main(){
 
 
 async fn run(event_loop: winit::event_loop::EventLoop<()>, window: winit::window::Window) {
+    let mut r = rand::thread_rng();
     let mut size = window.inner_size();
     size.width = size.width.max(1);
     size.height = size.height.max(1);
@@ -64,6 +63,8 @@ async fn run(event_loop: winit::event_loop::EventLoop<()>, window: winit::window
         size.width as f32, size.height as f32, 0.0, 0.0, // screen dimensions + 2 unused f32
         0.0, 0.0, 0.0, PI / 2.0, // camera position + fov
         0.0, 1.0, -5.0, 1.0, // light position + controlled by `[`/`]`
+        unsafe{ std::mem::transmute::<u32, f32>(r.gen())}, // random seed
+        0.0, 0.0, 0.0, // buffer for the u32
     ];
     let mut spheres: Vec<f32> = Vec::from([
         0.0, 0.0, -6.0, 0.25,// sphere position + radius
@@ -194,6 +195,8 @@ async fn run(event_loop: winit::event_loop::EventLoop<()>, window: winit::window
     let mut kb: HashMap<KeyCode, ElementState> = std::collections::HashMap::new();
 
     let mut select_buf = String::new();
+
+    let mut selected_sphere: usize = 0;
     event_loop.run(
     move |event, target|{
         // so they get cleaned up since run() never returns
@@ -279,23 +282,8 @@ async fn run(event_loop: winit::event_loop::EventLoop<()>, window: winit::window
                 }else{ //key just released
                     if let KeyCode::AltLeft = key{
                         println!("{}",select_buf);
-                        if let Ok(mut v) = select_buf.parse::<u32>(){
-                            v *= 8; // six floats per sphere
-                            v += 4; // get to color part
-                            if let Some(r) = spheres.get_mut(v as usize){
-                                *r = 1.0;
-                                is_spheres_update = true;
-                            }
-                            v += 1;
-                            if let Some(r) = spheres.get_mut(v as usize){
-                                *r = 0.0;
-                                is_spheres_update = true;
-                            }
-                            v += 1;
-                            if let Some(r) = spheres.get_mut(v as usize){
-                                *r = 0.0;
-                                is_spheres_update = true;
-                            }
+                        if let Ok(v) = select_buf.parse::<u32>(){
+                            selected_sphere = v as usize * 8; // eight floats per sphere
                         }
                         select_buf.clear();
                     }
@@ -307,7 +295,7 @@ async fn run(event_loop: winit::event_loop::EventLoop<()>, window: winit::window
             _ => (),
             }
         },
-        winit::event::Event::AboutToWait =>{
+        winit::event::Event::AboutToWait =>{ // as often as inputs are gathered
             for (key, value) in kb.iter(){
                 if let ElementState::Released = value{
                     continue;
@@ -331,11 +319,14 @@ async fn run(event_loop: winit::event_loop::EventLoop<()>, window: winit::window
                 if let KeyCode::KeyU = key{
                     delta.1 += LIGHT_MOVEMENT_STEP;
                 }
-                if let KeyCode::Minus= key{
-                    delta.3 += DEGREE;
-                }
                 if let KeyCode::Equal = key{
-                    delta.3 -= DEGREE;
+                    is_cmd_update = true;
+                    mandel_commands[7] = (mandel_commands[7] - DEGREE).max(0.01);
+                }
+                if let KeyCode::Minus = key{
+                    is_cmd_update = true;
+                    mandel_commands[7] = (mandel_commands[7] + DEGREE).min(PI - 0.01);
+
                 }
                 if let KeyCode::BracketRight = key{
                     mandel_commands[11] *= 1.01;
@@ -348,11 +339,13 @@ async fn run(event_loop: winit::event_loop::EventLoop<()>, window: winit::window
 
 
                     //8,9,10
-                mandel_commands[8] += delta.0;
-                mandel_commands[9] += delta.1;
-                mandel_commands[10] += delta.2;
-                mandel_commands[7] = (mandel_commands[7] + delta.3).max(f32::EPSILON);
-                is_cmd_update = true;
+                if delta != (0., 0., 0., 0.){
+                    spheres[selected_sphere] += delta.0;
+                    spheres[selected_sphere + 1] += delta.1;
+                    spheres[selected_sphere + 2] += delta.2;
+                    is_spheres_update = true;
+                }
+
                 // println!("x:\t{}\ny:\t{}\nz:\t{}\nzoom:\t{}\n", mandel_commands[8], mandel_commands[9], mandel_commands[10], mandel_commands[7]);
 
             }
@@ -360,6 +353,12 @@ async fn run(event_loop: winit::event_loop::EventLoop<()>, window: winit::window
         _=>(),
         }
         if is_cmd_update{
+            // increment the random seed
+            unsafe{
+                let mut v: u32 = std::mem::transmute::<f32, u32>(mandel_commands[12]);
+                v += 1;
+                mandel_commands[12] = std::mem::transmute::<u32, f32>(v)
+            }
             // dbg!(&mandel_commands);
             let (sender, receiver) = flume::bounded(1);
             let slice = staging_mandel_commands_buffer.slice(..);
@@ -410,15 +409,16 @@ async fn run(event_loop: winit::event_loop::EventLoop<()>, window: winit::window
     (0..n).into_iter().for_each(|_|{
         let mut r = rand::thread_rng();
         let mut e = vec![];
-        for _ in 0..7{e.push(r.gen::<f32>())}
-        let z = -2.0 + (-e[0] * 10.0);
-        let x = (e[1] * 4.0) - 2.0;
-        let y = (e[2] * 4.0) - 2.0;
-        let rad = e[3];
+        for _ in 0..8{e.push(r.gen::<f32>())}
+        let z = -3.0 - e[0] * 10.0;
+        let x = (e[1] - 0.5) * 10.;
+        let y = (e[2] - 0.5) * 10.;
+        let rad = e[3] * 2.0;
         let r = e[4].max(0.3);
         let g = e[5].max(0.3);
         let b = e[6].max(0.3);
-        spheres.append(&mut vec![x,y,z,rad,r,g,b,0.]);
+        let rough = e[7];
+        spheres.append(&mut vec![x,y,z,rad,r,g,b,rough]);
         
     });
  }
