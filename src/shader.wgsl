@@ -5,6 +5,7 @@ struct MandelCommands{
     size: vec4<f32>,
     cam: vec4<f32>,
     light: vec4<f32>,
+    seed: u32,
 }
 
 struct Sphere{
@@ -16,7 +17,6 @@ struct Material{
     col: vec3<f32>,
     roughness: f32,
 }
-
 struct HitInfo{
     is_hit: bool,
     dst: f32,
@@ -36,11 +36,19 @@ const void_color: vec3<f32> = vec3(0.0);
 
 const surface_dodge: f32 = 0.1;
 
-const NUM_BOUNCES: u32 = u32(1);
+const NUM_BOUNCES: u32 = u32(10);
+
+var<private> state: u32;
 
 @fragment
 fn fs_main(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
-
+    // uint2 numPixels = _ScreenParams.xy;
+    // uint2 pixelCoord = i.uv * numPixels;
+	// uint pixelIndex = pixelCoord.y * numPixels.x + pixelCoord.x;
+	// uint rngState = pixelIndex + Frame * 719393;
+    var pixel_index = (pos.y * cmd.size.x) + pos.x;
+    state = u32(pixel_index) * u32(719393);
+    // state += cmd.seed;
 
     var newpos = pos.xy;
     newpos.y = cmd.size.y - newpos.y;
@@ -58,6 +66,7 @@ fn fs_main(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     ;
 
     var view_plane_scalar: f32 = tan(cmd.cam.w / 2.0);
+    newpos *= view_plane_scalar;
 
     var new_ray_origin: vec3<f32> = vec3(0.0);
 
@@ -67,8 +76,8 @@ fn fs_main(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
 
     var col = vec3(0.0);
 
-    var min_dst = 100000000.0;
     for (var n = u32(1); n <= NUM_BOUNCES; n++){
+        var min_dst = 100000000.0;
         var best_hit: HitInfo;
         for (var i: u32 = u32(0); i < arrayLength(&spheres); i++){
             let hit = line_sphere_intercect(ray, spheres[i]);
@@ -77,18 +86,67 @@ fn fs_main(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
                 best_hit = hit;
             }
         }
-        col += best_hit.material.col * sun_occlusion_factor(ray, best_hit);
+        col += best_hit.material.col; // * sun_occlusion_factor(ray, best_hit);
+        ray = Ray(ray.dir * best_hit.dst + best_hit.normal * surface_dodge, mix(reflect(ray.dir, best_hit.normal), normalize(best_hit.normal + random_dir(&state)), best_hit.material.roughness));
     }
-
+    col /= f32(NUM_BOUNCES);
     return vec4<f32>(col, 1.0);
 }
-
-fn sun_occlusion_factor(ray: Ray, hit: HitInfo) -> f32{
-    if !hit.is_hit{
-        return 0.0;
-    }
-    return max(0.0, dot(ray.dir, normalize(cmd.light.xyz - hit.hit_point)));
+fn random_dir(state: ptr<private, u32>) -> vec3<f32>{
+    var x = random_value_normal_dist(state);
+    var y = random_value_normal_dist(state);
+    var z = random_value_normal_dist(state);
+    return normalize(vec3(x, y, z));
 }
+fn random_value_normal_dist(state: ptr<private, u32>) -> f32{
+    let theta = 2. * 3.1415926 * random_value(state);
+    let rho = sqrt(-2. * log(random_value(state)));
+    return rho * cos(theta);
+}
+fn random_value(state: ptr<private, u32>) -> f32 {
+    return f32(next_random(state)) / 4294967295.0;
+}
+fn next_random(state: ptr<private, u32>) -> u32{
+    *state = *state * u32(747796405) + u32(14456682.265 * 200.);
+    var result: u32 = ((*state >> ((*state >> u32(28)) + u32(4))) ^ *state) * u32(277803737);
+    result = (result >> u32(22)) ^ result;
+    return result;
+}
+// float3 RandomDirection(inout uint state){
+//     // Thanks to https://math.stackexchange.com/a/1585996
+//     float x = RandomValueNormalDistribution(state);
+//     float y = RandomValueNormalDistribution(state);
+//     float z = RandomValueNormalDistribution(state);
+//     return normalize(float3(x, y, z));
+// }
+
+
+			// PCG (permuted congruential generator). Thanks to:
+			// www.pcg-random.org and www.shadertoy.com/view/XlGcRh
+
+			// uint NextRandom(inout uint state)
+			// {
+			// 	state = state * 747796405 + 2891336453;
+			// 	uint result = ((state >> ((state >> 28) + 4)) ^ state) * 277803737;
+			// 	result = (result >> 22) ^ result;
+			// 	return result;
+			// }
+
+			// float RandomValue(inout uint state)
+			// {
+			// 	return NextRandom(state) / 4294967295.0; // 2^32 - 1
+			// }
+
+// float RandomValueNormalDistribution(inout uint state)
+// {
+// 	// Thanks to https://stackoverflow.com/a/6178290
+// 	float theta = 2 * 3.1415926 * RandomValue(state);
+// 	float rho = sqrt(-2 * log(RandomValue(state)));
+// 	return rho * cos(theta);
+// }
+
+
+
 
 fn line_sphere_intercect(ray: Ray, sphere: Sphere,) -> HitInfo {
     var hit_info: HitInfo = HitInfo();
