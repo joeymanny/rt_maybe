@@ -87,7 +87,7 @@ fn fs_main(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
             }
         }
         col += best_hit.material.col; // * sun_occlusion_factor(ray, best_hit);
-        ray = Ray(ray.dir * best_hit.dst + best_hit.normal * surface_dodge, mix(reflect(ray.dir, best_hit.normal), normalize(best_hit.normal + random_dir(&state)), best_hit.material.roughness));
+        ray = Ray(ray.dir * best_hit.dst + best_hit.normal * surface_dodge, mix(reflect(ray.dir, best_hit.normal), normalize(best_hit.normal + random_dir(&state)), clamp(best_hit.material.roughness + cmd.light.w, 0., 1.)));
     }
     col /= f32(NUM_BOUNCES);
     return vec4<f32>(col, 1.0);
