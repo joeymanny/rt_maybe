@@ -62,7 +62,7 @@ async fn run(event_loop: winit::event_loop::EventLoop<()>, window: winit::window
     let mandel_commands: &mut [f32] = &mut [
         size.width as f32, size.height as f32, 0.0, 0.0, // screen dimensions + 2 unused f32
         0.0, 0.0, 0.0, PI / 2.0, // camera position + fov
-        0.0, 1.0, -5.0, 1.0, // light position + controlled by `[`/`]`
+        0.0, 1.0, -5.0, 0.0, // light position + controlled by `[`/`]`
         unsafe{ std::mem::transmute::<u32, f32>(r.gen())}, // random seed
         0.0, 0.0, 0.0, // buffer for the u32
     ];
@@ -329,11 +329,13 @@ async fn run(event_loop: winit::event_loop::EventLoop<()>, window: winit::window
 
                 }
                 if let KeyCode::BracketRight = key{
-                    mandel_commands[11] *= 1.01;
+                    is_cmd_update = true;
+                    mandel_commands[11] = (mandel_commands[11] + 0.01).min(1.);
                     println!("arb: {}", mandel_commands[11]);
                 }
                 if let KeyCode::BracketLeft = key{
-                    mandel_commands[11] /= 1.01;
+                    is_cmd_update = true;
+                    mandel_commands[11] = (mandel_commands[11] - 0.01).max(-1.);
                     println!("arb: {}", mandel_commands[11]);
                 }
 
