@@ -34,7 +34,7 @@ const offset_ray_heading: vec3<f32> = vec3(0.0, 0.0, -1.0);
 
 const void_color: vec3<f32> = vec3(0.0);
 
-const surface_dodge: f32 = 0.1;
+const surface_dodge: f32 = 0.000001;
 
 const NUM_BOUNCES: u32 = u32(3);
 
