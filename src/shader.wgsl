@@ -36,7 +36,7 @@ const void_color: vec3<f32> = vec3(0.0);
 
 const surface_dodge: f32 = 0.1;
 
-const NUM_BOUNCES: u32 = u32(10);
+const NUM_BOUNCES: u32 = u32(3);
 
 var<private> state: u32;
 
