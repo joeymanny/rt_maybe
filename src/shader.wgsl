@@ -107,7 +107,8 @@ fn random_value(state: ptr<private, u32>) -> f32 {
     return f32(next_random(state)) / 4294967295.0;
 }
 fn next_random(state: ptr<private, u32>) -> u32{
-    *state = *state * u32(747796405) + u32(14456682.265 * 200.);
+    // *state = *state * u32(747796405) + u32(14456682.265 * 200.);
+    *state = *state * u32(747796405) + u32(f32(14456682.265) * f32(200.));
     var result: u32 = ((*state >> ((*state >> u32(28)) + u32(4))) ^ *state) * u32(277803737);
     result = (result >> u32(22)) ^ result;
     return result;

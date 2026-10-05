@@ -7,9 +7,9 @@ edition = "2021"
 
 [dependencies]
 winit = {version = "*", features = ["rwh_05"]}
-wgpu = "*"
-pollster = "*"
-env_logger = "*"
-bytemuck = "*"
-flume = "*"
-rand = "*"
+wgpu = "22.1"
+pollster = "0.3"
+env_logger = "0.11"
+bytemuck = "1.16"
+flume = "0.11"
+rand = "0.8"
